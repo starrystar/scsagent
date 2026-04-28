@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scsagent"               # 包名（安装后 import scsagent）
+version = "0.1.0"
+description = ""
+authors = [{name = "Your Name", email = "you@example.com"}]
+dependencies = [
+    "python-dotenv",
+    "requests",
+    # 其他依赖...
+]
+
+[tool.setuptools.packages.find]
+where = ["src", "."]                # 告诉 setuptools 包在 src/ 下
+include = ["scsagent*", "utils*"]  # 显式包含这两个包

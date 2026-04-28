@@ -1,0 +1,7 @@
+FROM co310
+RUN sudo apt-get update -y && \
+    sudo apt-get install -y git && \
+    git clone https://github.com/manusetty/wishbone.git && \
+    cd wishbone && \
+    sed -i 's/sklearn/scikit-learn/g' setup.py && \
+    pip3 install . --no-build-isolation
