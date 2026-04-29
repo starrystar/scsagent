@@ -12,17 +12,17 @@
 
 ```
 ┌─────────────────────────────────────────┐
-│  1️⃣ 环境准备 → 2️⃣ 数据库初始化  │
+│  1️⃣ 环境准备 → 2️⃣ 数据库初始化          │
 └────────────────┬────────────────────────┘
                  ▼
-┌─────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────┐
 │ 3️⃣ 文档爬取 → 4️⃣ Docker镜像管理 → 5️⃣ 工具运行/调试    │
-└─────────────────────────────────────────┘
+└───────────────────────────────────────────────────────┘
 ```
 
 > 🔑 **核心依赖链**：  
-> 数据库(`agent`) ← 文档数据(`docs`表) ← 爬虫模块(`ingest/`) 
-> 工具镜像(`Harbor仓库`) ← 运行模块(`scsagent.main`)
+> 数据库(`agent`) ← 文档数据(`docs`表) ← 爬虫模块(`ingest`)   
+> 工具镜像 ← 运行模块(`scsagent.main`)
 ---
 
 ## 📁 项目结构说明
@@ -33,37 +33,36 @@
 ├── 📄 setup.py / pyproject.toml          # pip install -e . 入口
 │
 ├── 📁 src/scsagent/                      # 🔍 Debug模块主目录
+│   ├── 📁 core/debug.py                  # Debug模块主文件
 │   └── 📄 main.py                        # 单工具运行入口
 │
 ├── 📁 ingest/                            # 🕷️ 文档获取模块（独立开发历史遗留）
-│   └── 📁 crawlers/
-│       ├── 📄 getdoc_github.py          # GitHub文档爬取
-│       └── 📄 getdoc_readthedoc.py      # ReadTheDocs爬取（预留）
-│
-├── 📁 utils/                             # 🔧 公共基础依赖
-│   ├── 📄 web_crawler.py                # 网页爬取工具
-│   └── 📄 docker_utils.py               # Docker容器运行工具
-│
-├── 📁 tests/                             # 🧪 测试与构建
+│   ├── 📁 crawlers/
+│   │   ├── 📄 getdoc_github.py          # GitHub文档爬取主文件
+│   │   └── 📄 getdoc_readthedoc.py      # ReadTheDocs爬取主文件
+│   └── 📁 db_insert/                  # 💾 数据库备份文件存储
+│       └── 📄 agent_backup_20260128_1729.sql 
+├── 📁 tests/                             # 🧪 镜像构建与测试模块
 │   ├── 📄 test.py                       # 批量运行入口
 │   ├── 📄 build_docker_from_scratch.py  # 镜像批量构建脚本
 │   ├── 📄 docker_build_results.csv      # 【输出】构建结果
 │   └── 📁 query/scratch/
 │       └── 📄 tool_tasktype_query_taskfiltered.xlsx  # 【输入/输出】批量任务文件
 │
-├── 📁 docker/                            # 🐳 Docker配置
-│   └── 📄 Dockerfile.py310              # 基础镜像模板（使用时去掉.py310后缀）
 │
-├── 📁 data/doc/                          # 📚 文档链接数据源
-│   ├── 📄 readthedocs_urls.xlsx         # ReadTheDocs链接列表（备用）
-│   └── 📄 doc_urls.csv                  # 综合链接（含GitHub+RTD，推荐使用）
+├── 📁 utils/                             # 🔧 公共基础依赖
+│   ├── 📄 web_crawler.py                # 网页爬取工具
+│   └── 📄 docker_utils.py               # Docker容器运行工具
 │
-├── 📁 ingest/db_insert/                  # 💾 数据库备份文件存储
-│   └── 📄 agent_backup_20260128_1729.sql # 示例备份文件
+├── 📁 docker/                            # 🐳 用于构建Docker运行镜像的配置
+│   ├── 📄 Dockerfile                     # 基础镜像模板
+│   └── 📄 buildx.sh                      # 启动buildkit容器
 │
-└── 📁 scsagent/                               # 🔄 工作流兼容目录（部分脚本需在此执行）
-    ├── 📄 buildx.sh                      # 启动buildkit容器
-    └── 📁 ingest/                        # 兼容旧路径引用
+└── 📁 data/doc/                          # 📚 文档链接数据源
+    ├── 📄 readthedocs_urls.xlsx         # ReadTheDocs链接列表（备用）
+    └── 📄 doc_urls.csv                  # 综合链接（含GitHub+RTD，推荐使用）
+ 
+
 ```
 
 ---
@@ -77,7 +76,15 @@
 pip install -e .
 ```
 
-### 2️⃣ 启动 MySQL 数据库容器
+### 2️⃣ 拉取并启动 MySQL 数据库容器
+
+```bash
+使用国内加速源拉取（推荐，国内网络更稳定）
+docker pull docker.1ms.run/library/mysql:latest
+
+若网络环境通畅，也可使用官方源：
+docker pull mysql:latest
+```
 
 ```bash
 docker run -itd --name mysql-dev \
@@ -97,7 +104,7 @@ docker exec -i mysql-dev mysql -u root -proot \
   --default-character-set=utf8mb4 agent \
   < ingest/db_insert/agent_backup_20260128_1729.sql
 
-# Windows (CMD) 导入命令
+# Windows Mysql客户端导入命令
 mysql -u root -proot --default-character-set=utf8mb4 agent < agent_backup_20260127.sql
 ```
 
@@ -114,7 +121,9 @@ SHOW TABLES;         # 应看到 docs, tools 等表
 ```
 
 ### 5 配置环境信息
-复制src\scsagent\config\.env.ref为.env文件，并配置。
+复制src/scsagent/config/.env.ref为.env文件，并配置。
+
+注：后续所有模块运行之前需要首先检查文件中的LLM、输入输出文件是否配置正确。
 
 ---
 
@@ -162,7 +171,7 @@ WHERE tool_id = (SELECT id FROM tools WHERE name = 'STREAM');
 
 ```bash
 # ===== 导出 =====
-# 方法一：在docker容器内执行（简单场景）
+# 方法一：在docker容器内执行
 docker exec -it mysql-dev bash -c "mysqldump -u root -proot agent > /tmp/agent_backup.sql"
 docker cp mysql-dev:/tmp/agent_backup.sql ./agent_backup.sql
 
@@ -218,59 +227,66 @@ data/doc/
 ### ▶️ 执行文档爬取
 
 ```bash
-# GitHub 文档爬取（主用）
-cd scsagent && python -m ingest.crawlers.getdoc_github \
+# GitHub 文档爬取（以下命令均在根目录运行）
+python -m ingest.crawlers.getdoc_github \
   --github-url https://github.com/LiQian-XC/sctour \
   --base-local-path D:/1Grad/Code/scsagent/tests/ingest \
   --tool-name scTour
 
-# ReadTheDocs 文档爬取（预留接口，当前未启用）
-cd scsagent && python -m ingest.crawlers.getdoc_readthedoc
+# ReadTheDocs 文档爬取
+python -m ingest.crawlers.getdoc_readthedoc
 ```
 
 > 💡 爬取结果将自动存入 `agent` 数据库的 `docs` 表，可通过前述 SQL 查询验证
 
 ---
 
-## 🐳 模块二：Docker 镜像管理
+## 🐳 模块二：构建Docker镜像用于调试Agent运行
 
-### 🔧 1. 构建环境依赖（❗构建镜像前必须检查）
+### 🔧 1. buildx镜像用于限制docker构建过程的运行资源
 
-> `docker build` 命令无法限制运行资源，易导致服务器内存超限告警，因此采用 `buildx` 命令构建，需确保以下服务已运行：
+> `docker build` 命令无法限制运行资源，易导致服务器内存超限告警，因此采用 `buildx` 命令构建：
 
-#### 必要镜像列表
+#### 拉取buildx基础镜像 (buildx 命令的后端构建引擎)
 
-```bash
-docker images
+```bash 
+docker pull moby/buildkit:v0.24.0
 ```
-
-| REPOSITORY | TAG | 用途 |
-|-----------|-----|------|
-| `wh-harbor.dcs.cloud/public-library/ub22_co310_scanpy_stomicstest` | `3.0` | 构建镜像使用的基础环境镜像 |
-| `moby/buildkit` | `v0.24.0` | buildx 命令的后端构建引擎 |
-| `docker.1ms.run/library/mysql` | `latest` | 文档数据库服务 |
-
-#### 必要容器列表
-
-```bash
-docker ps -a
-```
-
-| CONTAINER | IMAGE | STATUS | 用途 |
-|-----------|-------|--------|------|
-| `buildx_buildkit_limited-builder0` | `moby/buildkit:v0.24.0` | Up | buildx 构建后端（必须运行） |
-| `mysql-dev` | `docker.1ms.run/library/mysql:latest` | Up | MySQL 数据库服务 |
 
 #### 启动 BuildKit 容器
 
 ```bash
-cd scsagent/docker && bash buildx.sh
+cd docker && bash buildx.sh
 ```
 
-### 🏗️ 2. 批量构建镜像
+#### 启动之后例如：
+
+| CONTAINER | IMAGE | STATUS | 用途 |
+|-----------|-------|--------|------|
+| `buildx_buildkit_limited-builder0` | `moby/buildkit:v0.24.0` | Up | buildx 构建后端（必须运行） |
+
+### 🔎 2. 构建Agent运行镜像所依赖的基础镜像
+
+#### 下载Miniconda放置到Dockerfile文件同目录
+```bash
+# 使用清华源下载（国内网络稳定且速度快）
+wget https://mirrors.tuna.tsinghua.edu.cn/anaconda/miniconda/Miniconda3-py310_25.5.1-0-Linux-x86_64.sh
+
+# 或使用 curl
+curl -O https://mirrors.tuna.tsinghua.edu.cn/anaconda/miniconda/Miniconda3-py310_25.5.1-0-Linux-x86_64.sh
+```
+
+#### docker/Dockerfile所在目录运行
 
 ```bash
-cd scsagent/tests && python build_docker_from_scratch.py -n 10
+docker build -t {your_image_tag} .
+```
+得到构建镜像使用的基础环境镜像。服务器上该镜像为：`wh-harbor.dcs.cloud/public-library/ub22_co310_scanpy_stomicstest:3.0`（3.26GB）
+
+### 🏗️ 3. 构建Agent运行镜像
+
+```bash
+cd tests && python build_docker_from_scratch.py -n 10
 ```
 
 | 参数 | 说明 | 注意事项 |
@@ -279,21 +295,14 @@ cd scsagent/tests && python build_docker_from_scratch.py -n 10
 
 📊 **输出文件**：`tests/docker_build_results.csv`（记录构建结果）
 
-### 📄 3. 基础镜像 Dockerfile 说明
-
-- 文件路径：`docker/Dockerfile.py310`
-- 用途：构造后续运行镜像的基础环境
-- 使用方法：复制并重命名为 `Dockerfile`（去掉 `.py310` 后缀）后使用
-- 服务器已预置镜像：`wh-harbor.dcs.cloud/public-library/ub22_co310_scanpy_stomicstest:3.0`（3.26GB）
-
 ---
 
 ## 🚀 模块三：工具运行与调试
 
 ### 🔎 方式一：单工具独立调试
 
+项目根目录运行：
 ```bash
-cd ~/scsagent
 python -m scsagent.main \
     --query "使用Wishbone进行expression patterns任务，数据为/workspace/input/mouse.h5ad" \
     --host_work_dir "/stomics/ai/test/Wishbone" \
@@ -320,4 +329,3 @@ cd ~/scsagent && python tests/test.py
 |------|------|------|
 | 📥 输入文件 | `tests/query/scratch/tool_tasktype_query_taskfiltered.xlsx` | 包含待执行的任务列表（工具+任务类型+查询） |
 | 📤 输出文件 | 同目录生成执行结果 | 记录每个任务的运行状态与输出 |
-
